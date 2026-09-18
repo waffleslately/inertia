@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inertia — VIT Vellore Campus Shuttle Radar</title>
+
+  <!-- Google Fonts: Manrope (Display/Stats) & Inter (UI/Body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+
+  <!-- Leaflet CSS & JS (for reliable un-watermarked dark vector map fallback) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    :root {
+      --bg-black: #05070B;
+      --surface-sidebar: #090D15;
+      --surface-card: #0F1420;
+      --surface-card-hover: #141C2C;
+      --border-subtle: #172133;
+      --border-focus: #00E5FF;
+      
+      --accent-electric: #00E5FF;
+      --accent-blue: #3B82F6;
+      --accent-glow: 0 0 24px rgba(0, 229, 255, 0.4);
+      --accent-glow-subtle: 0 0 16px rgba(0, 229, 255, 0.2);
+
+      --text-hero: #FFFFFF;
+      --text-body: #CBD5E1;
+      --text-muted: #64748B;
+      --text-dim: #475569;
+
+      --status-success: #10B981;
+      --status-warning: #F59E0B;
+      --status-danger: #EF4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-black);
+      color: var(--text-body);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+    }
+
+    /* ==========================================================================
+       LAYOUT: Separate, clearly bordered zones (Dashboard Left, Map Right)
+       ========================================================================== */
+    .app-container {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg-black);
+      padding: 14px;
+      gap: 14px;
+    }
+
+    /* LEFT ZONE: Dashboard & Controls */
+    .dashboard-panel {
+      width: 440px;
+      min-width: 400px;
+      height: 100%;
+      background: var(--surface-sidebar);
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+    }
+
+    /* Header Bar */
+    .brand-section {
+      padding: 24px 28px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: linear-gradient(180deg, rgba(0, 229, 255, 0.05) 0%, rgba(9, 13, 21, 0) 100%);
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text-hero);
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-glow-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-electric);
+      box-shadow: 0 0 14px var(--accent-electric);
+    }
+
+    .campus-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      color: var(--accent-electric);
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid rgba(0, 229, 255, 0.35);
+      padding: 4px 10px;
+      border-radius: 12px;
+      text-transform: uppercase;
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      font-weight: 500;
+    }
+
+    /* Scrollable Dashboard Body */
+    .dashboard-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .dashboard-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+    .dashboard-scroll::-webkit-scrollbar-thumb {
+      background: var(--border-subtle);
+      border-radius: 4px;
+    }
+
+    /* SECTION 1: HERO STATS (Bold oversized display typography) */
+    .hero-stats-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 20px 24px;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      position: relative;
+    }
+
+    .hero-stats-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent-electric), transparent 70%);
+    }
+
+    .hero-stat-item {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .hero-stat-number {
+      font-family: 'Manrope', sans-serif;
+      font-size: 44px;
+      font-weight: 800;
+      line-height: 1.15;
+      color: var(--text-hero);
+      letter-spacing: -1.5px;
+      padding-top: 2px;
+    }
+
+    .hero-stat-number.cyan-glow {
+      color: var(--accent-electric);
+      text-shadow: 0 0 20px rgba(0, 229, 255, 0.45);
+    }
+
+    .hero-stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-top: 8px;
+    }
+
+    /* SECTION 2: CHECK-IN CONTROLS (Clearly separated section with soft depth glow) */
+    .section-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .section-header {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--accent-electric);
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .glow-btn-primary {
+      width: 100%;
+      height: 52px;
+      background: linear-gradient(135deg, #00E5FF 0%, #00B0FF 100%);
+      color: #05070B;
+      border: none;
+      border-radius: 14px;
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 20px rgba(0, 229, 255, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+      position: relative;
+    }
+
+    .glow-btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(0, 229, 255, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+    }
+
+    .glow-btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .glow-btn-secondary {
+      height: 42px;
+      background: rgba(15, 20, 32, 0.9);
+      color: var(--text-body);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .glow-btn-secondary:hover {
+      border-color: var(--accent-electric);
+      color: var(--accent-electric);
+      box-shadow: 0 0 14px rgba(0, 229, 255, 0.2);
+    }
+
+    /* SECTION 3: CAMPUS SHUTTLES LIST */
+    .shuttle-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .shuttle-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 16px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .shuttle-card:hover {
+      border-color: var(--accent-electric);
+      box-shadow: 0 4px 20px rgba(0, 229, 255, 0.18);
+    }
+
+    .shuttle-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .shuttle-name-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .shuttle-title {
+      font-family: 'Manrope', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-hero);
+    }
+
+    .shuttle-crowd-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .crowd-low { background: rgba(16, 185, 129, 0.15); color: var(--status-success); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .crowd-med { background: rgba(245, 158, 11, 0.15); color: var(--status-warning); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .crowd-high { background: rgba(239, 68, 68, 0.15); color: var(--status-danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .shuttle-metrics-row {
+      display: flex;
+      justify-content: space-between;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .metric-col-val {
+      font-family: 'Manrope', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text-hero);
+    }
+
+    .metric-col-lbl {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Illustrated Empty State */
+    .empty-state-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 32px 16px;
+      border: 1px dashed var(--border-subtle);
+      border-radius: 14px;
+      background: rgba(15, 20, 32, 0.5);
+    }
+
+    .empty-illustration {
+      width: 76px;
+      height: 76px;
+      margin-bottom: 14px;
+      opacity: 0.85;
+    }
+
+    .empty-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-body);
+      margin-bottom: 4px;
+    }
+
+    .empty-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      max-width: 240px;
+      line-height: 1.4;
+    }
+
+    /* RIGHT ZONE: Dedicated Map Viewport */
+    .map-section {
+      flex: 1;
+      height: 100%;
+      background: #020408;
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Map Navigation & Filter Header */
+    .map-topbar {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 1000;
+      pointer-events: none;
+    }
+
+    .map-topbar > * {
+      pointer-events: auto;
+    }
+
+    .route-filter-bar {
+      display: flex;
+      gap: 8px;
+      background: rgba(9, 13, 21, 0.88);
+      backdrop-filter: blur(12px);
+      padding: 6px;
+      border-radius: 14px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .filter-chip {
+      padding: 7px 14px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-chip.active {
+      background: rgba(0, 229, 255, 0.15);
+      color: var(--accent-electric);
+      border: 1px solid rgba(0, 229, 255, 0.4);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
+    }
+
+    .telemetry-status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(9, 13, 21, 0.88);
+      backdrop-filter: blur(12px);
+      padding: 8px 16px;
+      border-radius: 30px;
+      border: 1px solid var(--border-subtle);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-body);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .live-dot-pulse {
+      width: 8px;
+      height: 8px;
+      background: var(--status-success);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--status-success);
+      animation: pulse-dot 1.8s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    #map-viewport {
+      width: 100%;
+      height: 100%;
+      background: #000000;
+    }
+
+    /* Google Maps / Leaflet custom styles */
+    .leaflet-container {
+      background: #000000 !important;
+    }
+
+    /* Custom Stop Pin Badge */
+    .custom-stop-marker {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transform: translate(-50%, -50%);
+      white-space: nowrap;
+      pointer-events: auto;
+    }
+
+    .stop-node-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      border: 2px solid var(--accent-electric);
+      box-shadow: 0 0 10px var(--accent-electric);
+    }
+
+    .stop-label-pill {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      color: #FFFFFF;
+      background: rgba(9, 13, 21, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 2px 8px;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+    }
+
+    /* Pulsing Shuttle Vehicle Marker */
+    .custom-shuttle-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .shuttle-pulse-aura {
+      position: absolute;
+      border-radius: 50%;
+      animation: pulse-aura 2.2s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+    }
+
+    @keyframes pulse-aura {
+      0% { transform: scale(0.6); opacity: 0.9; }
+      80%, 100% { transform: scale(2.4); opacity: 0; }
+    }
+
+    .shuttle-badge-body {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #00E5FF 0%, #0088FF 100%);
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.7);
+      border: 2px solid #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      z-index: 10;
+      transition: transform 0.6s ease-out;
+    }
+
+    .shuttle-eta-tag {
+      position: absolute;
+      top: -26px;
+      background: #00E5FF;
+      color: #05070B;
+      font-family: 'Manrope', sans-serif;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 8px;
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.6);
+      white-space: nowrap;
+      z-index: 12;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- LEFT PANEL: Distinct Bordered Dashboard -->
+    <aside class="dashboard-panel">
+      
+      <!-- Brand & Campus Header -->
+      <div class="brand-section">
+        <div class="brand-row">
+          <div class="brand-title">
+            <div class="brand-glow-dot"></div>
+            <span>INERTIA</span>
+          </div>
+          <span class="campus-badge">VIT VELLORE</span>
+        </div>
+        <div class="brand-subtitle">Crowd-Sourced Campus Shuttle Detection</div>
+      </div>
+
+      <!-- Scrollable Telemetry & Controls -->
+      <div class="dashboard-scroll">
+        
+        <!-- SECTION 1: HERO STATS (Oversized numbers, fewer larger stats) -->
+        <div class="hero-stats-card">
+          <div class="hero-stat-item">
+            <div class="hero-stat-number cyan-glow" id="hero-shuttle-count">3</div>
+            <div class="hero-stat-label">Active Shuttles</div>
+          </div>
+          <div style="width: 1px; height: 48px; background: var(--border-subtle); opacity: 0.8;"></div>
+          <div class="hero-stat-item">
+            <div class="hero-stat-number" id="hero-phone-count">18</div>
+            <div class="hero-stat-label">Co-Moving Phones</div>
+          </div>
+        </div>
+
+        <!-- SECTION 2: CHECK-IN & CONTROLS (Own clearly bordered section with soft depth) -->
+        <div class="section-card">
+          <div class="section-header">
+            <span>Rider Check-In Hub</span>
+            <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">GPS Clustering</span>
+          </div>
+          
+          <button class="glow-btn-primary" onclick="handleStudentCheckIn()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            <span>I'm on the Shuttle (Check In)</span>
+          </button>
+
+          <div class="btn-secondary-row">
+            <button class="glow-btn-secondary" onclick="simulateNearStopArrival()">
+              <span>📍 Test Near TT</span>
+            </button>
+            <button class="glow-btn-secondary" onclick="simulateUpiPayment()">
+              <span>💳 Pay ₹20 (UPI)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- SECTION 3: CAMPUS SHUTTLES & LIVE ETAs -->
+        <div>
+          <div class="section-header">
+            <span>Live Shuttles En Route</span>
+            <span id="route-count-tag" style="font-size: 10px; color: var(--text-muted);">2 ROUTES</span>
+          </div>
+
+          <div class="shuttle-list" id="shuttle-items-container">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- SECTION 4: ROUTE DEFINITIONS -->
+        <div class="section-card" style="padding: 16px 20px;">
+          <div class="section-header" style="margin-bottom: 10px;">
+            <span>Campus Network</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="width: 10px; height: 10px; border-radius: 2px; background: #00E5FF; box-shadow: 0 0 8px #00E5FF;"></div>
+                <span style="font-size: 13px; font-weight: 600; color: #fff;">Men's Hostel Route</span>
+              </div>
+              <span style="font-size: 11px; color: var(--text-muted);">4.1 km • 13 Stops</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="width: 10px; height: 10px; border-radius: 2px; background: #3B82F6; box-shadow: 0 0 8px #3B82F6;"></div>
+                <span style="font-size: 13px; font-weight: 600; color: #fff;">Ladies Hostel Route</span>
+              </div>
+              <span style="font-size: 11px; color: var(--text-muted);">2.6 km • 8 Stops</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- RIGHT PANEL: Dedicated Map Viewport -->
+    <main class="map-section">
+      
+      <!-- Floating Map Filter & Telemetry Pill Bar -->
+      <div class="map-topbar">
+        <div class="route-filter-bar">
+          <button class="filter-chip active" onclick="filterRoute('all')">All Routes</button>
+          <button class="filter-chip" onclick="filterRoute('route_1')">Men's Hostel</button>
+          <button class="filter-chip" onclick="filterRoute('route_2')">Ladies Hostel</button>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <button class="telemetry-status-badge" onclick="recenterCampus()" style="cursor: pointer; pointer-events: auto;">
+            <span>🎯 Recenter VIT</span>
+          </button>
+          <div class="telemetry-status-badge">
+            <div class="live-dot-pulse"></div>
+            <span id="ws-telemetry-status">LIVE TELEMETRY</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map Container -->
+      <div id="map-viewport"></div>
+    </main>
+
+  </div>
+
+  <script>
+    // VIT Vellore Campus Center Coordinates
+    const VIT_CENTER = [12.9712, 79.1605];
+    const VIT_BOUNDS = [
+      [12.9640, 79.1510],
+      [12.9785, 79.1685]
+    ];
+
+    let map;
+    let routesData = [];
+    let routeLayers = {};
+    let stopMarkers = [];
+    let shuttleMarkers = {};
+    let currentFilter = 'all';
+
+    // Initialize Map with custom pure dark style (No broken watermarks)
+    function initMap() {
+      map = L.map('map-viewport', {
+        center: VIT_CENTER,
+        zoom: 16.3,
+        minZoom: 15,
+        maxZoom: 18.5,
+        maxBounds: VIT_BOUNDS,
+        maxBoundsViscosity: 0.9,
+        zoomControl: false,
+        attributionControl: false
+      });
+
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      // Clean, unwatermarked pure dark vector tiles (Stadia Alidade Smooth Dark)
+      L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
+        maxZoom: 20,
+        subdomains: 'abcd',
+      }).addTo(map);
+    }
+
+    // Load Routes from API & Draw snapped polylines + named stop markers
+    async function loadRoutes() {
+      try {
+        const res = await fetch('/api/v1/routes');
+        const data = await res.json();
+        routesData = data.routes;
+
+        routesData.forEach(route => {
+          const color = route.color || (route.id === 'route_1' ? '#00E5FF' : '#3B82F6');
+
+          // Glow polyline
+          const glowLine = L.polyline(route.polyline, {
+            color: color,
+            weight: 9,
+            opacity: 0.22,
+            lineCap: 'round',
+            lineJoin: 'round'
+          }).addTo(map);
+
+          // Core crisp polyline
+          const coreLine = L.polyline(route.polyline, {
+            color: color,
+            weight: 3.8,
+            opacity: 0.95,
+            lineCap: 'round',
+            lineJoin: 'round',
+            dashArray: route.id === 'route_2' ? '8, 6' : null
+          }).addTo(map);
+
+          routeLayers[route.id] = [glowLine, coreLine];
+
+          // Draw Named Stop Markers
+          route.stops.forEach(stop => {
+            const icon = L.divIcon({
+              className: 'custom-stop-container',
+              html: `
+                <div class="custom-stop-marker">
+                  <div class="stop-node-dot" style="border-color: ${color};"></div>
+                  <div class="stop-label-pill">${stop.name}</div>
+                </div>
+              `,
+              iconSize: [0, 0]
+            });
+
+            const marker = L.marker([stop.latitude, stop.longitude], { icon: icon }).addTo(map);
+            marker.routeId = route.id;
+            stopMarkers.push(marker);
+          });
+        });
+
+      } catch (err) {
+        console.error("Error loading routes:", err);
+      }
+    }
+
+    // Connect WebSocket for live telemetry
+    function connectWebSocket() {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${proto}//${window.location.host}/ws/debug`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        document.getElementById('ws-telemetry-status').innerText = 'LIVE TELEMETRY';
+        document.getElementById('ws-telemetry-status').style.color = '#10B981';
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'DEBUG_UPDATE') {
+          updateDashboard(data);
+        }
+      };
+
+      ws.onclose = () => {
+        document.getElementById('ws-telemetry-status').innerText = 'RECONNECTING...';
+        document.getElementById('ws-telemetry-status').style.color = '#EF4444';
+        setTimeout(connectWebSocket, 2500);
+      };
+    }
+
+    // Update Telemetry & Shuttle Markers
+    function updateDashboard(data) {
+      // 1. Update Hero Stats (Oversized typography)
+      document.getElementById('hero-shuttle-count').innerText = data.active_shuttle_count;
+      document.getElementById('hero-phone-count').innerText = data.active_rider_count;
+
+      const container = document.getElementById('shuttle-items-container');
+      const currentIds = new Set();
+
+      if (!data.shuttles || data.shuttles.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state-wrap">
+            <svg class="empty-illustration" viewBox="0 0 64 64" fill="none">
+              <circle cx="32" cy="32" r="28" stroke="#172133" stroke-width="2"/>
+              <rect x="18" y="24" width="28" height="18" rx="4" stroke="#00E5FF" stroke-width="2" fill="rgba(0, 229, 255, 0.08)"/>
+              <circle cx="24" cy="42" r="3" fill="#00E5FF"/>
+              <circle cx="40" cy="42" r="3" fill="#00E5FF"/>
+              <path d="M22 28H42" stroke="#00E5FF" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <div class="empty-title">Awaiting Rider Pings</div>
+            <div class="empty-desc">Run simulator or check in to detect campus shuttle clusters.</div>
+          </div>
+        `;
+      } else {
+        container.innerHTML = '';
+      }
+
+      data.shuttles.forEach(shuttle => {
+        currentIds.add(shuttle.shuttle_id);
+
+        let crowdClass = 'crowd-low';
+        let auraColor = 'rgba(0, 229, 255, 0.45)';
+        if (shuttle.crowd_category === 'Medium') {
+          crowdClass = 'crowd-med';
+          auraColor = 'rgba(245, 158, 11, 0.45)';
+        } else if (shuttle.crowd_category === 'Crowded') {
+          crowdClass = 'crowd-high';
+          auraColor = 'rgba(239, 68, 68, 0.45)';
+        }
+
+        const etaMin = shuttle.eta_seconds ? Math.ceil(shuttle.eta_seconds / 60) + ' min' : 'Arrived';
+        const routeTitle = shuttle.route_id === 'route_1' ? "Men's Hostel" : "Ladies Hostel";
+
+        // Render card
+        const card = document.createElement('div');
+        card.className = 'shuttle-card';
+        card.innerHTML = `
+          <div class="shuttle-top">
+            <div class="shuttle-name-group">
+              <span class="shuttle-title">Shuttle ${shuttle.shuttle_id.split('_').pop()}</span>
+              <span style="font-size: 11px; color: var(--text-muted);">• ${routeTitle}</span>
+            </div>
+            <span class="shuttle-crowd-pill ${crowdClass}">${shuttle.rider_count} Riders</span>
+          </div>
+          <div class="shuttle-metrics-row">
+            <div>
+              <div class="metric-col-val" style="color: #00E5FF;">${etaMin}</div>
+              <div class="metric-col-lbl">ETA to ${shuttle.next_stop_name || 'Stop'}</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="metric-col-val">${shuttle.speed_kmh} km/h</div>
+              <div class="metric-col-lbl">Transit Speed</div>
+            </div>
+          </div>
+        `;
+        card.onclick = () => {
+          map.setView([shuttle.latitude, shuttle.longitude], 17, { animate: true });
+        };
+        container.appendChild(card);
+
+        // Update / Add marker on map
+        if (shuttleMarkers[shuttle.shuttle_id]) {
+          const m = shuttleMarkers[shuttle.shuttle_id];
+          m.setLatLng([shuttle.latitude, shuttle.longitude]);
+          const el = m.getElement();
+          if (el) {
+            const body = el.querySelector('.shuttle-badge-body');
+            if (body) body.style.transform = `rotate(${shuttle.bearing}deg)`;
+            const eta = el.querySelector('.shuttle-eta-tag');
+            if (eta) eta.innerText = etaMin;
+          }
+        } else {
+          const icon = L.divIcon({
+            className: 'custom-shuttle-marker-wrap',
+            html: `
+              <div class="custom-shuttle-marker">
+                <div class="shuttle-pulse-aura" style="width: 54px; height: 54px; background: ${auraColor};"></div>
+                <div class="shuttle-eta-tag">${etaMin}</div>
+                <div class="shuttle-badge-body" style="transform: rotate(${shuttle.bearing}deg);">
+                  🚌
+                </div>
+              </div>
+            `,
+            iconSize: [54, 54],
+            iconAnchor: [27, 27]
+          });
+
+          const marker = L.marker([shuttle.latitude, shuttle.longitude], { icon: icon }).addTo(map);
+          shuttleMarkers[shuttle.shuttle_id] = marker;
+        }
+      });
+
+      // Remove gone shuttles
+      Object.keys(shuttleMarkers).forEach(id => {
+        if (!currentIds.has(id)) {
+          map.removeLayer(shuttleMarkers[id]);
+          delete shuttleMarkers[id];
+        }
+      });
+    }
+
+    // Filter by route
+    function filterRoute(routeId) {
+      currentFilter = routeId;
+      document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+
+      Object.keys(routeLayers).forEach(rid => {
+        const layers = routeLayers[rid];
+        const isVisible = (routeId === 'all' || routeId === rid);
+        layers.forEach(l => {
+          if (isVisible) map.addLayer(l);
+          else map.removeLayer(l);
+        });
+      });
+
+      stopMarkers.forEach(m => {
+        const isVisible = (routeId === 'all' || m.routeId === routeId);
+        if (isVisible) map.addLayer(m);
+        else map.removeLayer(m);
+      });
+    }
+
+    function recenterCampus() {
+      map.setView(VIT_CENTER, 16.3, { animate: true });
+    }
+
+    async function handleStudentCheckIn() {
+      const demoId = "rider_student_" + Math.floor(Math.random() * 1000);
+      try {
+        const res = await fetch('/api/v1/check-in', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rider_id: demoId,
+            route_id: 'route_1',
+            latitude: 12.968497,
+            longitude: 79.156119
+          })
+        });
+        const data = await res.json();
+        alert(`⚡ Check-in successful!\nRider ${demoId} checked in on Men's Hostel Route.\nSession: ${data.session_id}`);
+      } catch (e) {
+        alert("Check-in error: " + e.message);
+      }
+    }
+
+    function simulateNearStopArrival() {
+      alert("📍 Near-Destination Trigger:\nRider approaching Technology Tower (TT).\nHaptic feedback sent. Prompt: 'Pay ₹20 via UPI?'");
+    }
+
+    async function simulateUpiPayment() {
+      try {
+        const res = await fetch('/api/v1/payments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rider_id: "demo_rider",
+            route_id: "route_1",
+            amount: 20.0,
+            status: "COMPLETED"
+          })
+        });
+        const data = await res.json();
+        alert(`💳 Payment Confirmed!\n₹20.00 logged for demo_rider.\nID: ${data.payment_id}`);
+      } catch (e) {
+        alert("Payment error: " + e.message);
+      }
+    }
+
+    // Google Maps Loader
+    function loadGoogleMaps(apiKey) {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry`;
+      script.onload = () => {
+        document.getElementById('map-viewport').innerHTML = '';
+        initGoogleMap();
+      };
+      script.onerror = () => {
+        console.warn('Google Maps failed to load, falling back to Dark Vector Engine.');
+        initMap();
+        loadRoutes();
+      };
+      document.head.appendChild(script);
+    }
+
+    function initGoogleMap() {
+      const gMap = new google.maps.Map(document.getElementById('map-viewport'), {
+        center: { lat: VIT_CENTER[0], lng: VIT_CENTER[1] },
+        zoom: 16.3,
+        restriction: {
+          latLngBounds: {
+            north: 12.9785,
+            south: 12.9640,
+            east: 79.1685,
+            west: 79.1510
+          },
+          strictBounds: true
+        },
+        styles: [
+          { elementType: "geometry", stylers: [{ color: "#000000" }] },
+          { elementType: "labels.text.stroke", stylers: [{ color: "#000000" }] },
+          { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+          { featureType: "road", elementType: "geometry", stylers: [{ color: "#171c26" }] },
+          { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1f2633" }] },
+          { featureType: "water", elementType: "geometry", stylers: [{ color: "#0b1522" }] },
+          { featureType: "poi", stylers: [{ visibility: "off" }] }
+        ],
+        disableDefaultUI: true,
+        zoomControl: true
+      });
+      // Google maps ready indicator
+      const badge = document.getElementById('ws-telemetry-status');
+      if (badge) badge.innerText = 'GOOGLE MAPS ENGINE';
+      loadRoutesGoogle(gMap);
+    }
+
+    async function loadRoutesGoogle(gMap) {
+      try {
+        const res = await fetch('/api/v1/routes');
+        const data = await res.json();
+        data.routes.forEach(route => {
+          const color = route.color || (route.id === 'route_1' ? '#00E5FF' : '#3B82F6');
+          const pathCoords = route.polyline.map(pt => ({ lat: pt[0], lng: pt[1] }));
+          
+          new google.maps.Polyline({
+            path: pathCoords,
+            geodesic: true,
+            strokeColor: color,
+            strokeOpacity: 0.9,
+            strokeWeight: 4,
+            map: gMap
+          });
+
+          route.stops.forEach(stop => {
+            new google.maps.Marker({
+              position: { lat: stop.latitude, lng: stop.longitude },
+              map: gMap,
+              title: stop.name,
+              label: {
+                text: stop.name,
+                color: "#FFFFFF",
+                fontSize: "11px",
+                fontWeight: "bold"
+              }
+            });
+          });
+        });
+      } catch (e) {
+        console.error("Error loading routes on Google Maps:", e);
+      }
+    }
+
+    // Startup & Bootstrap
+    async function bootstrap() {
+      try {
+        const cfgRes = await fetch('/api/v1/config');
+        const cfg = await cfgRes.json();
+        const urlParams = new URLSearchParams(window.location.search);
+        const apiKey = urlParams.get('key') || cfg.google_maps_api_key;
+        
+        if (apiKey && apiKey.trim() !== '') {
+          loadGoogleMaps(apiKey);
+        } else {
+          initMap();
+          loadRoutes();
+        }
+      } catch (e) {
+        initMap();
+        loadRoutes();
+      }
+      connectWebSocket();
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>

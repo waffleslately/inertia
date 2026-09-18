@@ -1,0 +1,11 @@
+{
+  "name": "Inertia — VIT Shuttle Tracker",
+  "short_name": "Inertia",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0A0E17",
+  "theme_color": "#00E5FF",
+  "description": "Crowd-Sourced Campus Shuttle Tracking for VIT Vellore",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false
+}

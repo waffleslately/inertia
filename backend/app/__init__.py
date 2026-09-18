@@ -1,0 +1,1 @@
+# Inertia Backend Application
