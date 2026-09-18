@@ -1,3 +1,4 @@
+HEAD
 # ⚡ Inertia — VIT Vellore Campus Shuttle Tracker
 
 > **Crowd-Sourced Shuttle Tracking for VIT Vellore**  
@@ -108,3 +109,7 @@ GEOFENCE_LAT_MAX=12.9785
 GEOFENCE_LNG_MIN=79.1510
 GEOFENCE_LNG_MAX=79.1675
 ```
+
+# inertia
+Turning phones into shuttle GPS trackers — no hardware, just data
+ 9ea4b5ce283da03ee5bd9c0df2f08ebf503697cb
