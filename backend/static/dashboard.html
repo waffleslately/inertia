@@ -478,14 +478,27 @@
       50% { opacity: 0.4; transform: scale(0.85); }
     }
 
+    /* Map viewport container and touch-action override */
     #map-viewport {
       width: 100%;
       height: 100%;
       background: #000000;
+      touch-action: none !important;
+      overscroll-behavior: none !important;
+      user-select: none !important;
+      -webkit-user-select: none !important;
     }
 
-    /* Google Maps / Leaflet custom styles */
-    .leaflet-container {
+    /* Prevent browser and map wrappers from intercepting two-finger trackpad panning */
+    .map-section,
+    .leaflet-container,
+    .gm-style,
+    .leaflet-pane,
+    .leaflet-map-pane {
+      touch-action: none !important;
+      overscroll-behavior: none !important;
+      user-select: none !important;
+      -webkit-user-select: none !important;
       background: #000000 !important;
     }
 
@@ -697,11 +710,12 @@
   </div>
 
   <script>
-    // VIT Vellore Campus Center Coordinates
-    const VIT_CENTER = [12.9712, 79.1605];
+    // VIT Vellore Campus Center Coordinates & Hard Restricted Bounds
+    // Bounds: SW (12.9670, 79.1538) to NE (12.9745, 79.1678) adjusted to include all route stops (PRP, Men's Hostel)
+    const VIT_CENTER = [12.9710, 79.1608];
     const VIT_BOUNDS = [
-      [12.9640, 79.1510],
-      [12.9785, 79.1685]
+      [12.9670, 79.1538],
+      [12.9745, 79.1678]
     ];
 
     let map;
@@ -711,15 +725,19 @@
     let shuttleMarkers = {};
     let currentFilter = 'all';
 
-    // Initialize Map with custom pure dark style (No broken watermarks)
+    // Initialize Map with custom pure dark style and fluid pan gestures
     function initMap() {
       map = L.map('map-viewport', {
         center: VIT_CENTER,
         zoom: 16.3,
-        minZoom: 15,
+        minZoom: 15.5,
         maxZoom: 18.5,
         maxBounds: VIT_BOUNDS,
-        maxBoundsViscosity: 0.9,
+        maxBoundsViscosity: 0.1,
+        dragging: true,
+        tap: true,
+        touchZoom: true,
+        scrollWheelZoom: true,
         zoomControl: false,
         attributionControl: false
       });
@@ -731,6 +749,33 @@
         maxZoom: 20,
         subdomains: 'abcd',
       }).addTo(map);
+
+      window.leafletMapInstance = map;
+      setupTrackpadPanListener();
+    }
+
+    // Support smooth two-finger trackpad panning for both Google Maps & Leaflet engines
+    function setupTrackpadPanListener() {
+      const viewport = document.getElementById('map-viewport');
+      if (!viewport || viewport.dataset.trackpadBound) return;
+      viewport.dataset.trackpadBound = "true";
+
+      viewport.addEventListener('wheel', (e) => {
+        // If user holds Ctrl or performs pinch-to-zoom on trackpad, let map zoom
+        if (e.ctrlKey) {
+          return;
+        }
+
+        // Two-finger trackpad scroll: pan map by deltaX and deltaY without page scroll
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (window.gMapInstance) {
+          window.gMapInstance.panBy(e.deltaX, e.deltaY);
+        } else if (map && typeof map.panBy === 'function') {
+          map.panBy([e.deltaX, e.deltaY], { animate: false });
+        }
+      }, { passive: false });
     }
 
     // Load Routes from API & Draw snapped polylines + named stop markers
@@ -1013,12 +1058,15 @@
       const gMap = new google.maps.Map(document.getElementById('map-viewport'), {
         center: { lat: VIT_CENTER[0], lng: VIT_CENTER[1] },
         zoom: 16.3,
+        gestureHandling: "greedy",
+        draggable: true,
+        scrollwheel: true,
         restriction: {
           latLngBounds: {
-            north: 12.9785,
-            south: 12.9640,
-            east: 79.1685,
-            west: 79.1510
+            north: 12.9745,
+            south: 12.9670,
+            east: 79.1678,
+            west: 79.1538
           },
           strictBounds: true
         },
@@ -1034,6 +1082,8 @@
         disableDefaultUI: true,
         zoomControl: true
       });
+      window.gMapInstance = gMap;
+      setupTrackpadPanListener();
       // Google maps ready indicator
       const badge = document.getElementById('ws-telemetry-status');
       if (badge) badge.innerText = 'GOOGLE MAPS ENGINE';

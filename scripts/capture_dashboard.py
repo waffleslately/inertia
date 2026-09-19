@@ -21,12 +21,12 @@ now = time.time()
 test_pings = []
 
 # Cluster 1 on Route 1 (near Stop 7 / Stop 8) - 8 riders
+pt1 = r1[min(45, len(r1)-1)]
 for i in range(8):
-    pt = r1[70]
     test_pings.append({
         "rider_id": f"rider_a_{i+1}",
-        "latitude": pt[0] + (i * 0.00002),
-        "longitude": pt[1] + (i * 0.00002),
+        "latitude": pt1[0] + (i * 0.00002),
+        "longitude": pt1[1] + (i * 0.00002),
         "speed_mps": 4.5,
         "heading": 85.0,
         "timestamp": now,
@@ -35,12 +35,12 @@ for i in range(8):
     })
 
 # Cluster 2 on Route 1 (near Stop 11 / Men's Hostel) - 5 riders
+pt2 = r1[min(82, len(r1)-1)]
 for i in range(5):
-    pt = r1[180]
     test_pings.append({
         "rider_id": f"rider_b_{i+1}",
-        "latitude": pt[0] + (i * 0.00002),
-        "longitude": pt[1] + (i * 0.00002),
+        "latitude": pt2[0] + (i * 0.00002),
+        "longitude": pt2[1] + (i * 0.00002),
         "speed_mps": 4.8,
         "heading": 70.0,
         "timestamp": now,
@@ -49,12 +49,12 @@ for i in range(5):
     })
 
 # Cluster 3 on Route 2 (near Ladies Hostel / SMV) - 6 riders
+pt3 = r2[min(30, len(r2)-1)]
 for i in range(6):
-    pt = r2[35]
     test_pings.append({
         "rider_id": f"rider_c_{i+1}",
-        "latitude": pt[0] + (i * 0.00002),
-        "longitude": pt[1] + (i * 0.00002),
+        "latitude": pt3[0] + (i * 0.00002),
+        "longitude": pt3[1] + (i * 0.00002),
         "speed_mps": 4.2,
         "heading": 240.0,
         "timestamp": now,

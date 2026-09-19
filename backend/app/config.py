@@ -23,10 +23,10 @@ class Settings(BaseSettings):
     MERCHANT_NAME: str = "VIT Campus Shuttle"
 
     # Geofence bounding box for VIT Vellore campus
-    GEOFENCE_LAT_MIN: float = 12.9640
-    GEOFENCE_LAT_MAX: float = 12.9785
-    GEOFENCE_LNG_MIN: float = 79.1510
-    GEOFENCE_LNG_MAX: float = 79.1675
+    GEOFENCE_LAT_MIN: float = 12.9670
+    GEOFENCE_LAT_MAX: float = 12.9745
+    GEOFENCE_LNG_MIN: float = 79.1538
+    GEOFENCE_LNG_MAX: float = 79.1678
 
     DATA_DIR: Path = Path(__file__).resolve().parent.parent / "data"
 

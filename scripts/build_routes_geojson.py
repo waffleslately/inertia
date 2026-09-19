@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import urllib.request
 from pathlib import Path
 
@@ -23,6 +24,7 @@ raw_route1_stops = [
 ]
 
 # Route 2: Ladies Hostel Route
+# Named stops for markers and transit schedule
 raw_route2_stops = [
     ("PRP", 12.972678, 79.167190),
     ("Stop 2", 12.971867, 79.163765),
@@ -34,62 +36,106 @@ raw_route2_stops = [
     ("Main Gate", 12.968517, 79.156206)
 ]
 
+# Route 2 waypoints with intermediate bend at top-left corner of building block (12.971756, 79.163195)
+# to force road-following L-shape (west along top road, south along left edge) instead of diagonal cut
+route2_routing_waypoints = [
+    ("PRP", 12.972678, 79.167190),
+    ("Stop 2", 12.971867, 79.163765),
+    ("Road Bend (Stop 2-3)", 12.971756, 79.163195),
+    ("Stop 3", 12.970796, 79.163225),
+    ("Stop 4", 12.970404, 79.162577),
+    ("Stop 5", 12.968976, 79.160465),
+    ("Ladies Hostel", 12.968613, 79.159280),
+    ("SMV", 12.968732, 79.158345),
+    ("Main Gate", 12.968517, 79.156206)
+]
+
+def haversine(lat1, lon1, lat2, lon2):
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+    return 6371000 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+def query_osrm(profile, lon1, lat1, lon2, lat2):
+    url = f"http://router.project-osrm.org/route/v1/{profile}/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
+    req = urllib.request.Request(url, headers={"User-Agent": "InertiaApp/1.0"})
+    with urllib.request.urlopen(req, timeout=8) as resp:
+        data = json.loads(resp.read().decode())
+        if data.get("code") == "Ok":
+            route = data["routes"][0]
+            return route["geometry"]["coordinates"], route["distance"]
+    return None, None
+
+def route_segment(s1_name, lat1, lon1, s2_name, lat2, lon2):
+    straight_dist = haversine(lat1, lon1, lat2, lon2)
+    
+    # 1. Try driving route first
+    driving_coords, driving_dist = query_osrm("driving", lon1, lat1, lon2, lat2)
+    
+    # Check if <= 2x straight-line distance
+    if driving_dist and (driving_dist / max(straight_dist, 1.0) <= 2.0):
+        print(f"  [OK: driving] {s1_name} -> {s2_name}: {driving_dist:.1f}m (straight: {straight_dist:.1f}m, {driving_dist/straight_dist:.2f}x)")
+        return driving_coords, driving_dist
+        
+    # 1b. Check reverse driving (campus paths frequently have one-way tags in OSM)
+    rev_driving_coords, rev_driving_dist = query_osrm("driving", lon2, lat2, lon1, lat1)
+    if rev_driving_dist and (rev_driving_dist / max(straight_dist, 1.0) <= 2.0):
+        print(f"  [RESOLVED: reverse driving] {s1_name} -> {s2_name}: {rev_driving_dist:.1f}m (straight: {straight_dist:.1f}m, {rev_driving_dist/straight_dist:.2f}x)")
+        return list(reversed(rev_driving_coords)), rev_driving_dist
+
+    print(f"  >>> [FLAGGED SEGMENT > 2x] {s1_name} -> {s2_name}: driving distance {driving_dist}m > 2x straight-line {straight_dist:.1f}m")
+    
+    # 2. Try walking mode for this segment
+    print(f"      Attempting mode=walking for {s1_name} -> {s2_name}...")
+    walking_coords, walking_dist = query_osrm("walking", lon1, lat1, lon2, lat2)
+    
+    if walking_dist and (walking_dist / max(straight_dist, 1.0) <= 2.0):
+        print(f"      [RESOLVED: walking] {s1_name} -> {s2_name}: {walking_dist:.1f}m (ratio: {walking_dist/straight_dist:.2f}x)")
+        return walking_coords, walking_dist
+        
+    # 2b. Check reverse walking
+    rev_walking_coords, rev_walking_dist = query_osrm("walking", lon2, lat2, lon1, lat1)
+    if rev_walking_dist and (rev_walking_dist / max(straight_dist, 1.0) <= 2.0):
+        print(f"      [RESOLVED: reverse walking] {s1_name} -> {s2_name}: {rev_walking_dist:.1f}m (ratio: {rev_walking_dist/straight_dist:.2f}x)")
+        return list(reversed(rev_walking_coords)), rev_walking_dist
+
+    # 3. If still wrong (>2x), hardcode direct line between the two known coords
+    print(f"      >>> [FALLBACK: DIRECT LINE] {s1_name} -> {s2_name}: walking still {walking_dist}m (>2x). Using direct line shortcut ({straight_dist:.1f}m).")
+    direct_coords = [
+        [lon1, lat1],
+        [lon1 + 0.33 * (lon2 - lon1), lat1 + 0.33 * (lat2 - lat1)],
+        [lon1 + 0.66 * (lon2 - lon1), lat1 + 0.66 * (lat2 - lat1)],
+        [lon2, lat2]
+    ]
+    return direct_coords, straight_dist
+
+def generate_route_polyline(stops):
+    total_polyline = []
+    total_dist = 0.0
+    
+    for i in range(len(stops) - 1):
+        s1_name, lat1, lon1 = stops[i]
+        s2_name, lat2, lon2 = stops[i+1]
+        
+        seg_coords, seg_dist = route_segment(s1_name, lat1, lon1, s2_name, lat2, lon2)
+        total_dist += seg_dist
+        
+        if not total_polyline:
+            total_polyline.extend(seg_coords)
+        else:
+            # Avoid duplicate vertex
+            total_polyline.extend(seg_coords[1:])
+            
+    return total_polyline, total_dist
+
 def verify_and_correct_sign(stops):
-    """
-    Verifies that all latitudes are negative as instructed.
-    If positive, treats as typo and corrects to negative.
-    Returns: List of (name, neg_lat, lon)
-    """
     corrected = []
     for name, lat, lon in stops:
         neg_lat = -abs(lat)
         corrected.append((name, neg_lat, lon))
     return corrected
 
-def fetch_road_polyline(stops):
-    """
-    Fetches the road-following polyline using OSRM (with Google Directions API fallback/support).
-    Uses positive coordinates for real-world road network graph matching on VIT Vellore campus.
-    """
-    api_key = os.environ.get("GOOGLE_MAPS_API_KEY")
-    if api_key:
-        try:
-            origin = f"{abs(stops[0][1])},{stops[0][2]}"
-            dest = f"{abs(stops[-1][1])},{stops[-1][2]}"
-            wp = "|".join(f"{abs(s[1])},{s[2]}" for s in stops[1:-1])
-            url = f"https://maps.googleapis.com/maps/api/directions/json?origin={origin}&destination={dest}&waypoints={wp}&key={api_key}"
-            req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode())
-                if data.get("status") == "OK":
-                    import polyline
-                    enc = data["routes"][0]["overview_polyline"]["points"]
-                    decoded = polyline.decode(enc)
-                    return [[pt[1], pt[0]] for pt in decoded], data["routes"][0]["legs"]
-        except Exception as e:
-            print(f"Google Directions API fallback to OSRM: {e}")
-
-    # OSRM Overpass/OSM Fallback (coordinates in lon, lat)
-    coords_str = ";".join(f"{lon},{abs(lat)}" for name, lat, lon in stops)
-    url = f"http://router.project-osrm.org/route/v1/driving/{coords_str}?overview=full&geometries=geojson"
-    req = urllib.request.Request(url, headers={"User-Agent": "InertiaApp/1.0"})
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        data = json.loads(resp.read().decode())
-        if data.get("code") == "Ok":
-            route = data["routes"][0]
-            # Coordinates returned as [lon, positive_lat]
-            return route["geometry"]["coordinates"], route["distance"]
-        else:
-            raise RuntimeError(f"OSRM Routing failed: {data}")
-
 def create_geojson(route_name, stops_corrected, polyline_coords, distance_m, color="#00E5FF"):
-    """
-    Builds a GeoJSON FeatureCollection with:
-    - LineString for the path with negative latitudes
-    - Named Point feature for each stop with negative latitude
-    """
-    # In GeoJSON: [longitude, latitude]
-    # Convert polyline latitudes to negative as per user instruction
     geojson_polyline = [[coord[0], -abs(coord[1])] for coord in polyline_coords]
 
     features = [
@@ -130,42 +176,12 @@ def create_geojson(route_name, stops_corrected, polyline_coords, distance_m, col
         "features": features
     }
 
-def main():
-    print("Processing Route 1: Men's Hostel Route...")
-    r1_corrected = verify_and_correct_sign(raw_route1_stops)
-    coords1, dist1 = fetch_road_polyline(r1_corrected)
-    geojson1 = create_geojson("Men's Hostel Route", r1_corrected, coords1, dist1, color="#00E5FF")
-
-    out1_root = BASE_DIR / "menshostel_route.geojson"
-    out1_data = BASE_DIR / "backend" / "data" / "menshostel_route.geojson"
-    with open(out1_root, "w", encoding="utf-8") as f:
-        json.dump(geojson1, f, indent=2)
-    with open(out1_data, "w", encoding="utf-8") as f:
-        json.dump(geojson1, f, indent=2)
-    print(f"Saved {out1_root} ({len(coords1)} points, {dist1:.1f}m)")
-
-    print("\nProcessing Route 2: Ladies Hostel Route...")
-    r2_corrected = verify_and_correct_sign(raw_route2_stops)
-    coords2, dist2 = fetch_road_polyline(r2_corrected)
-    geojson2 = create_geojson("Ladies Hostel Route", r2_corrected, coords2, dist2, color="#3B82F6")
-
-    out2_root = BASE_DIR / "ladieshostel_route.geojson"
-    out2_data = BASE_DIR / "backend" / "data" / "ladieshostel_route.geojson"
-    with open(out2_root, "w", encoding="utf-8") as f:
-        json.dump(geojson2, f, indent=2)
-    with open(out2_data, "w", encoding="utf-8") as f:
-        json.dump(geojson2, f, indent=2)
-    print(f"Saved {out2_root} ({len(coords2)} points, {dist2:.1f}m)")
-
-    # Also update backend/data/routes.json for live app execution
-    update_app_routes(r1_corrected, coords1, r2_corrected, coords2)
-
 def update_app_routes(r1_stops, coords1, r2_stops, coords2):
     routes_file = BASE_DIR / "backend" / "data" / "routes.json"
     data = {
         "campus": {
             "name": "VIT Vellore",
-            "center": [12.9715, 79.1585],
+            "center": [12.9712, 79.1605],
             "geofence": [
                 [12.9640, 79.1510],
                 [12.9650, 79.1685],
@@ -215,7 +231,36 @@ def update_app_routes(r1_stops, coords1, r2_stops, coords2):
     }
     with open(routes_file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    print(f"Updated {routes_file} with new campus route polylines and stops.")
+    print(f"Updated {routes_file} with corrected road polylines.")
+
+def main():
+    print("=== Generating Route 1: Men's Hostel Route with Segment Checking ===")
+    coords1, dist1 = generate_route_polyline(raw_route1_stops)
+    r1_corrected = verify_and_correct_sign(raw_route1_stops)
+    geojson1 = create_geojson("Men's Hostel Route", r1_corrected, coords1, dist1, color="#00E5FF")
+
+    out1_root = BASE_DIR / "menshostel_route.geojson"
+    out1_data = BASE_DIR / "backend" / "data" / "menshostel_route.geojson"
+    with open(out1_root, "w", encoding="utf-8") as f:
+        json.dump(geojson1, f, indent=2)
+    with open(out1_data, "w", encoding="utf-8") as f:
+        json.dump(geojson1, f, indent=2)
+    print(f"Saved {out1_root} ({len(coords1)} points, {dist1:.1f}m)")
+
+    print("\n=== Generating Route 2: Ladies Hostel Route with Segment Checking ===")
+    coords2, dist2 = generate_route_polyline(route2_routing_waypoints)
+    r2_corrected = verify_and_correct_sign(raw_route2_stops)
+    geojson2 = create_geojson("Ladies Hostel Route", r2_corrected, coords2, dist2, color="#3B82F6")
+
+    out2_root = BASE_DIR / "ladieshostel_route.geojson"
+    out2_data = BASE_DIR / "backend" / "data" / "ladieshostel_route.geojson"
+    with open(out2_root, "w", encoding="utf-8") as f:
+        json.dump(geojson2, f, indent=2)
+    with open(out2_data, "w", encoding="utf-8") as f:
+        json.dump(geojson2, f, indent=2)
+    print(f"Saved {out2_root} ({len(coords2)} points, {dist2:.1f}m)")
+
+    update_app_routes(r1_corrected, coords1, r2_corrected, coords2)
 
 if __name__ == "__main__":
     main()
